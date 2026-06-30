@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>气球语音翻译助手</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section id="languagePage" class="page page-active">
+        <div class="brand">
+          <span class="brand-mark"></span>
+          <div>
+            <h1>气球语音翻译助手</h1>
+            <p>选择客户语言，开始面对面沟通</p>
+          </div>
+        </div>
+
+        <div class="language-grid" id="languageGrid" aria-label="选择客户语言"></div>
+      </section>
+
+      <section id="translatorPage" class="page">
+        <header class="translator-header">
+          <button class="ghost-button" id="backButton" type="button">返回</button>
+          <div>
+            <p class="label">当前客户语言</p>
+            <h2 id="currentLanguage">English / 英语</h2>
+          </div>
+        </header>
+
+        <div id="statusBar" class="status-bar">按住按钮开始录音</div>
+
+        <section class="voice-panel merchant-panel">
+          <p class="section-title">商户对客户说</p>
+          <button class="hold-button merchant-button" id="merchantRecordButton" type="button">
+            按住说中文
+          </button>
+
+          <div class="result-block">
+            <p class="result-label">中文原文</p>
+            <p class="result-text" id="merchantSource">等待录音...</p>
+          </div>
+
+          <div class="result-block">
+            <p class="result-label">翻译结果</p>
+            <p class="result-text" id="merchantTranslation">外语翻译会显示在这里</p>
+          </div>
+
+          <button class="secondary-button" id="replayButton" type="button" disabled>再播放一次</button>
+        </section>
+
+        <div class="divider"></div>
+
+        <section class="voice-panel customer-panel">
+          <p class="section-title">客户对商户说</p>
+          <button class="hold-button customer-button" id="customerRecordButton" type="button">
+            Customer Speak English
+          </button>
+
+          <div class="result-block">
+            <p class="result-label">客户原文</p>
+            <p class="result-text" id="customerSource">等待录音...</p>
+          </div>
+
+          <div class="result-block">
+            <p class="result-label">中文翻译</p>
+            <p class="result-text" id="customerTranslation">中文翻译会显示在这里</p>
+          </div>
+        </section>
+
+        <button class="clear-button" id="clearButton" type="button">清空对话</button>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

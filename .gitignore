@@ -1,0 +1,8 @@
+node_modules/
+backend/node_modules/
+backend/.env
+backend/uploads/*
+backend/audio/*
+!backend/uploads/.gitkeep
+!backend/audio/.gitkeep
+npm-debug.log*
