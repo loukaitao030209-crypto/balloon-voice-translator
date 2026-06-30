@@ -1,4 +1,9 @@
-const API_BASE = window.location.port === "3000" ? "" : "http://localhost:3000";
+const API_BASE =
+  window.location.protocol === "file:" ||
+  (window.location.hostname === "localhost" && window.location.port !== "3000") ||
+  (window.location.hostname === "127.0.0.1" && window.location.port !== "3000")
+    ? "http://localhost:3000"
+    : "";
 
 const languages = [
   { name: "English", zh: "英语", speechCode: "en-US", translateCode: "en" },
@@ -167,7 +172,9 @@ async function textToSpeech(text, language) {
 async function playAudio(audioUrl) {
   if (!audioUrl) throw new Error("后端没有返回可播放音频");
 
-  const url = audioUrl.startsWith("http") ? audioUrl : `${API_BASE}${audioUrl}`;
+  const url = audioUrl.startsWith("http") || audioUrl.startsWith("data:")
+    ? audioUrl
+    : `${API_BASE}${audioUrl}`;
   const audio = new Audio(url);
 
   await new Promise((resolve, reject) => {

@@ -37,6 +37,37 @@ npx serve .
 
 独立前端默认调用 `http://localhost:3000` 的后端接口。
 
+## Vercel 部署
+
+项目已包含 `vercel.json` 和 `api/index.js`，可以直接从 GitHub 导入到 Vercel 部署。
+
+在 Vercel 项目的 `Settings -> Environment Variables` 中至少配置一个真实 Key：
+
+```env
+AI_API_KEY=your_openai_api_key_here
+```
+
+也可以分别配置：
+
+```env
+STT_API_KEY=your_stt_api_key_here
+TRANSLATE_API_KEY=your_translate_api_key_here
+TTS_API_KEY=your_tts_api_key_here
+```
+
+可选配置：
+
+```env
+OPENAI_STT_MODEL=gpt-4o-mini-transcribe
+OPENAI_TRANSLATE_MODEL=gpt-4o-mini
+OPENAI_TTS_MODEL=gpt-4o-mini-tts
+OPENAI_TTS_VOICE=coral
+OPENAI_TIMEOUT_MS=60000
+ALLOW_API_FALLBACK=false
+```
+
+不要把本地 `backend/.env` 上传到 GitHub。Vercel 只需要在后台环境变量里配置 Key。
+
 ## 环境变量
 
 复制示例文件：

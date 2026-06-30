@@ -8,10 +8,12 @@ require("dotenv").config();
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
+const isWindows = process.platform === "win32";
+const isVercel = Boolean(process.env.VERCEL);
 const rootDir = path.resolve(__dirname, "..");
 const frontendDir = path.join(rootDir, "frontend");
-const uploadDir = path.join(__dirname, "uploads");
-const audioDir = path.join(__dirname, "audio");
+const uploadDir = isVercel ? "/tmp/uploads" : path.join(__dirname, "uploads");
+const audioDir = isVercel ? "/tmp/audio" : path.join(__dirname, "audio");
 
 fs.mkdirSync(uploadDir, { recursive: true });
 fs.mkdirSync(audioDir, { recursive: true });
@@ -119,6 +121,46 @@ async function openaiJsonViaPowerShell(url, body, ...keys) {
   return JSON.parse(decodeBase64Utf8(stdout));
 }
 
+async function openaiJson(url, body, ...keys) {
+  if (isWindows) {
+    return openaiJsonViaPowerShell(url, body, ...keys);
+  }
+
+  const apiKey = envValue(...keys);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Number(process.env.OPENAI_TIMEOUT_MS || 60000));
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+    const responseText = await response.text();
+
+    if (!response.ok) {
+      let message = responseText;
+      try {
+        message = JSON.parse(responseText).error?.message || responseText;
+      } catch (error) {
+        // Keep raw text when the response is not JSON.
+      }
+      throw new Error(message || `HTTP ${response.status}`);
+    }
+
+    return JSON.parse(responseText);
+  } catch (error) {
+    if (error.name === "AbortError") throw new Error("Request timed out.");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function openaiTranscriptionViaPowerShell(file, language) {
   const apiKey = envValue("STT_API_KEY", "AI_API_KEY", "OPENAI_API_KEY");
   const script = [
@@ -154,6 +196,52 @@ async function openaiTranscriptionViaPowerShell(file, language) {
   return JSON.parse(decodeBase64Utf8(stdout));
 }
 
+async function openaiTranscription(file, language) {
+  if (isWindows) {
+    return openaiTranscriptionViaPowerShell(file, language);
+  }
+
+  const apiKey = envValue("STT_API_KEY", "AI_API_KEY", "OPENAI_API_KEY");
+  const audioBuffer = await fs.promises.readFile(file.path);
+  const formData = new FormData();
+  formData.append("file", new Blob([audioBuffer]), file.originalname || "recording.webm");
+  formData.append("model", process.env.OPENAI_STT_MODEL || "gpt-4o-mini-transcribe");
+  formData.append("response_format", "json");
+
+  const openAiLanguage = toOpenAiLanguage(language);
+  if (openAiLanguage) formData.append("language", openAiLanguage);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Number(process.env.OPENAI_TIMEOUT_MS || 60000));
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      signal: controller.signal,
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: formData
+    });
+    const responseText = await response.text();
+
+    if (!response.ok) {
+      let message = responseText;
+      try {
+        message = JSON.parse(responseText).error?.message || responseText;
+      } catch (error) {
+        // Keep raw text when the response is not JSON.
+      }
+      throw new Error(message || `HTTP ${response.status}`);
+    }
+
+    return JSON.parse(responseText);
+  } catch (error) {
+    if (error.name === "AbortError") throw new Error("Request timed out.");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function openaiSpeechViaPowerShell(body, outputFile, ...keys) {
   const apiKey = envValue(...keys);
   const script = [
@@ -169,6 +257,49 @@ async function openaiSpeechViaPowerShell(body, outputFile, ...keys) {
     OPENAI_OUTPUT_FILE: outputFile,
     OPENAI_TIMEOUT_SEC: String(Math.ceil(Number(process.env.OPENAI_TIMEOUT_MS || 60000) / 1000))
   });
+}
+
+async function openaiSpeech(body, outputFile, ...keys) {
+  if (isWindows) {
+    await openaiSpeechViaPowerShell(body, outputFile, ...keys);
+    return fs.promises.readFile(outputFile);
+  }
+
+  const apiKey = envValue(...keys);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Number(process.env.OPENAI_TIMEOUT_MS || 60000));
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/audio/speech", {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      const responseText = await response.text();
+      let message = responseText;
+      try {
+        message = JSON.parse(responseText).error?.message || responseText;
+      } catch (error) {
+        // Keep raw text when the response is not JSON.
+      }
+      throw new Error(message || `HTTP ${response.status}`);
+    }
+
+    const audioBuffer = Buffer.from(await response.arrayBuffer());
+    await fs.promises.writeFile(outputFile, audioBuffer);
+    return audioBuffer;
+  } catch (error) {
+    if (error.name === "AbortError") throw new Error("Request timed out.");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function toOpenAiLanguage(language) {
@@ -226,7 +357,7 @@ async function speechToTextService(file, language) {
   }
 
   try {
-    const transcription = await openaiTranscriptionViaPowerShell(file, language);
+    const transcription = await openaiTranscription(file, language);
     return transcription.text || "";
   } catch (error) {
     if (allowApiFallback()) return mockSpeechToText(language);
@@ -240,7 +371,7 @@ async function translateService(text, from, to) {
   }
 
   try {
-    const completion = await openaiJsonViaPowerShell(
+    const completion = await openaiJson(
       "https://api.openai.com/v1/chat/completions",
       {
         model: process.env.OPENAI_TRANSLATE_MODEL || "gpt-4o-mini",
@@ -289,7 +420,7 @@ async function textToSpeechService(text, language) {
   const filePath = path.join(audioDir, fileName);
 
   try {
-    await openaiSpeechViaPowerShell(
+    const audioBuffer = await openaiSpeech(
       {
         model: process.env.OPENAI_TTS_MODEL || "gpt-4o-mini-tts",
         voice: process.env.OPENAI_TTS_VOICE || "coral",
@@ -304,6 +435,11 @@ async function textToSpeechService(text, language) {
   } catch (error) {
     if (allowApiFallback()) return "";
     throw new Error(`OpenAI 语音合成失败：${error.message}`);
+  }
+
+  if (isVercel) {
+    const audioBuffer = await fs.promises.readFile(filePath);
+    return `data:audio/mpeg;base64,${audioBuffer.toString("base64")}`;
   }
 
   return `/audio/${fileName}`;
@@ -420,6 +556,10 @@ app.use((err, req, res, next) => {
   res.status(status >= 400 && status < 600 ? status : 500).json({ error: message });
 });
 
-app.listen(PORT, () => {
-  console.log(`Balloon voice translator is running at http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Balloon voice translator is running at http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
